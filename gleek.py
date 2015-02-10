@@ -40,3 +40,4 @@ for image in imagelist:
                                   g.inspect_get_minor_version(root))
         print "Type: %s" % (g.inspect_get_type(root))
         print "Distro: %s" % (g.inspect_get_distro(root))
+    g.close()
