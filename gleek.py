@@ -28,7 +28,7 @@ for image in imagelist:
     disk_protocol = url.scheme
     disk = url.path.strip("/")
 # Todo, how do I figure out the username? Maybe load from cfg?
-    remote_username = "svl5-csl-b-aio-glance-user"
+    remote_username = env['RBD_CLIENT']
     g = guestfs.GuestFS(python_return_dict=True)
     g.add_drive_opts(disk, format=disk_format, readonly=1,
                      protocol=disk_protocol, username=remote_username)
