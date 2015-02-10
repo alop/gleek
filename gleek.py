@@ -30,7 +30,7 @@ for image in imagelist:
 # Todo, how do I figure out the username? Maybe load from cfg?
     remote_username = env['RBD_CLIENT']
     g = guestfs.GuestFS(python_return_dict=True)
-    g.add_drive_opts(disk, format=disk_format, readonly=1,
+    g.add_drive_opts(disk, 1, disk_format,
                      protocol=disk_protocol, username=remote_username)
     g.launch()
     roots = g.inspect_os()
