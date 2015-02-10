@@ -25,13 +25,13 @@ for image in imagelist:
     location = image['direct_url']
     disk_format = image['disk_format']
     url = urlparse(location)
-    disk_protocol = url.scheme
+    protocol = url.scheme
     disk = url.path.strip("/")
 # Todo, how do I figure out the username? Maybe load from cfg?
-    remote_username = env['RBD_CLIENT']
+    username = env['RBD_CLIENT']
     g = guestfs.GuestFS(python_return_dict=True)
-    g.add_drive_opts(disk, 1, disk_format,
-                     protocol=disk_protocol, username=remote_username)
+    g.add_drive_opts(disk, 1, format=disk_format,
+                     protocol=protocol, username=username)
     g.launch()
     roots = g.inspect_os()
     for root in roots:
