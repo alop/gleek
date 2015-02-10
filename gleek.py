@@ -23,7 +23,7 @@ imagelist = glance.images.list()
 for image in imagelist:
     uuid = image['id']
     location = image['direct_url']
-    disk_format = image['format']
+    disk_format = image['disk_format']
     url = urlparse(location)
     disk_protocol = url.scheme
     disk = url.path.strip("/")
