@@ -12,3 +12,8 @@ All you need is your admin openrc, set the name of your rbd client, and we're of
 Usage:
 source openrc
 export RBD_CLIENT=your-glance-client
+
+## Requirements
+
+Gleek requires libguestfs 1.26+, which is not available via pypi
+Install via package manager or Download source from http://libguestfs.org 
