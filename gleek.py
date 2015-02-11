@@ -22,15 +22,17 @@ glance = glclient.Client(glance_endpoint, token=keystone.auth_token)
 imagelist = glance.images.list()
 for image in imagelist:
     uuid = image['id']
+    label = image['name']
     location = image['direct_url']
-    disk_format = image['disk_format']
+    format = image['disk_format']
     url = urlparse(location)
     protocol = url.scheme
     disk = url.path.strip("/")
+    disk = disk.strip("/snap")
 # Todo, how do I figure out the username? Maybe load from cfg?
     username = env['RBD_CLIENT']
     g = guestfs.GuestFS(python_return_dict=True)
-    g.add_drive_opts(disk, 1, format=disk_format,
+    g.add_drive_opts(disk, 1, format, label=label,
                      protocol=protocol, username=username)
     g.launch()
     roots = g.inspect_os()
@@ -40,4 +42,5 @@ for image in imagelist:
                                   g.inspect_get_minor_version(root))
         print "Type: %s" % (g.inspect_get_type(root))
         print "Distro: %s" % (g.inspect_get_distro(root))
+    g.remove_drive(label)
     g.close()
