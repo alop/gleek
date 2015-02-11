@@ -34,6 +34,7 @@ def inspect_image(disk, uuid, name, format, protocol, username):
                          protocol=protocol, username=username)
     except RuntimeError as msg:
         print "%s (ignored)" % msg
+        return
     g.launch()
     roots = g.inspect_os()
     for root in roots:
@@ -43,14 +44,20 @@ def inspect_image(disk, uuid, name, format, protocol, username):
         version = str(majver) + "." + str(minver)
         ostype = g.inspect_get_type(root)
         distro = g.inspect_get_distro(root)
-        print "Product name for %s: %s" % (name, product)
-        print "Version: %s" % (version)
-        print "Type: %s" % (ostype)
-        print "Distro: %s" % (distro)
     g.close()
     c.execute("INSERT INTO images VALUES (?,?,?,?,?,?)",
               (uuid, name, product, version, ostype, distro))
     conn.commit()
+
+
+def report_images():
+    allimages = c.execute(
+        "SELECT name, product, type, distro, version from images")
+    for img in allimages:
+        print("Image %s is %s, which is OS type %s\n"
+              "The Distribution is %s, version %s") % (img[0], img[1], img[2],
+                                                       img[3], img[4])
+
 
 imagelist = glance.images.list()
 for image in imagelist:
@@ -71,4 +78,4 @@ for image in imagelist:
     else:
         print "Image %(name)s already inspected, skipping" % locals()
 
-
+report_images()
