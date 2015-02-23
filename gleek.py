@@ -2,6 +2,24 @@
 
 # Utility to inspect (peek) at glance images
 # Glance + Peek = gleek
+# Copyright 2015, Abel Lopez
+# All rights reserved
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
+"""
+Gleek
+"""
 
 import argparse
 from glanceclient import Client as glclient
@@ -27,6 +45,12 @@ tenant_name = ""
 
 
 def inspect_image(disk, uuid, name, format, protocol, rbd_client):
+    """
+    Clearly this is specific to rbd hosted images, however a
+    future version may be more generic. 
+    Inspect OS of guest using GuestFS, write results to DB and
+    update glance metadata
+    """
     g = guestfs.GuestFS(python_return_dict=True)
     print "Checking %(protocol)s for %(name)s" % locals()
     try:
@@ -48,10 +72,14 @@ def inspect_image(disk, uuid, name, format, protocol, rbd_client):
     c.execute("INSERT INTO images VALUES (?,?,?,?,?,?)",
               (uuid, name, product, version, ostype, distro))
     conn.commit()
-    update_image(uuid, ostype, version)
+    update_image(uuid, ostype, version, product)
 
 
 def report_images():
+    """
+    Print out from the DB what we know about images thusfar
+    Does not update glance metadata
+    """
     allimages = c.execute(
         "SELECT name, product, type, distro, version from images")
     for img in allimages:
@@ -61,6 +89,10 @@ def report_images():
 
 
 def get_imagelist():
+    """
+    Connect to glance, get an image list. If the image has already been
+    inspected, skip further inspection, Otherwise inspect the image
+    """
     # Figure out endpoints
     keystone = ksclient.Client(auth_url=auth_url,
                                username=username,
@@ -90,7 +122,12 @@ def get_imagelist():
             print "Image %(name)s already inspected, skipping" % locals()
 
 
-def update_image(img_id, img_os, img_ver):
+def update_image(img_id, img_os, img_ver, prod_name):
+    """
+    Connect to glance via v1 API, as the v2 doesn't allow setting
+    arbitrary properties (yet)
+    Sets os_distro, os_version, os_name in glance metadata
+    """
     # Figure out endpoints
     keystone = ksclient.Client(auth_url=auth_url,
                                username=username,
@@ -99,11 +136,19 @@ def update_image(img_id, img_os, img_ver):
 
     glance_endpoint = keystone.service_catalog.url_for(service_type='image')
     glance = glclient('1', glance_endpoint, token=keystone.auth_token)
-    options = {'properties': {'os_distro': img_os, 'os_version': img_ver}}
+    options = {'properties':
+               {'os_distro': img_os,
+                'os_version': img_ver,
+                'os_name': prod_name
+                }
+               }
     glance.images.update(img_id, **options)
 
 
 def parse_args():
+    """
+    Check for existence of openstack variables and rbd key
+    """
     # Make sure we have all our variables sourced properly
     parser = argparse.ArgumentParser(description="Glance Peek")
     parser.add_argument('command', choices=['check', 'report'])
