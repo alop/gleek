@@ -61,6 +61,8 @@ def inspect_image(disk, uuid, name, format, protocol, rbd_client):
         return
     g.launch()
     roots = g.inspect_os()
+    if not roots:
+        product = majver = minver = version = ostype = distro = "Unknown"
     for root in roots:
         product = g.inspect_get_product_name(root)
         majver = g.inspect_get_major_version(root)
