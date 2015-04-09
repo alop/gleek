@@ -1,0 +1,17 @@
+---
+- hosts: all
+  pre_tasks:
+    - name: upgrade all packages
+      yum: name=* state=latest
+  tasks:
+    - name: install {{ item }} packages
+      yum: name={{ item }}
+      with_items:
+        - libguestfs
+        - libguestfs-tools
+        - python-libguestfs
+        - python-glanceclient
+        - git
+        - sqlite
+        - qemu
+        - libvirt
