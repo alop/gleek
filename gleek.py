@@ -21,6 +21,7 @@ Gleek
 
 import argparse
 import os
+import sys
 from urlparse import urlparse
 
 from glanceclient import Client as glclient
@@ -153,38 +154,26 @@ def parse_args():
     # Make sure we have all our variables sourced properly
     parser = argparse.ArgumentParser(description="Glance Peek")
     parser.add_argument('command', choices=['check', 'report'])
-    try:
-        parser.add_argument('--auth_url', help='Keystone endpoint',
-                            default=os.environ['OS_AUTH_URL'])
-    except KeyError:
-        print "OS_AUTH_URL not set, did you source openrc?"
-        raise
-    try:
-        parser.add_argument('--os_username', help='Openstack username',
-                            default=os.environ['OS_USERNAME'])
-    except KeyError:
-        print "OS_USERNAME not set, did you source openrc?"
-        raise
-    try:
-        parser.add_argument('--os_password', help='Openstack password',
-                            default=os.environ['OS_PASSWORD'])
-    except KeyError:
-        print "OS_PASSWORD not set, did you source openrc?"
-        raise
-    try:
-        parser.add_argument('--os_tenant_name', help='Keystone tenant',
-                            default=os.environ['OS_TENANT_NAME'])
-    except KeyError:
-        print "OS_TENANT_NAME not set, did you source openrc?"
-        raise
-    try:
-        parser.add_argument('--rbd_client_name', help='Cephx user',
-                            default=os.environ['RBD_CLIENT'])
-    except KeyError:
-        print "RBD_CLIENT not set"
-        raise
+    parser.add_argument('--auth_url', help='Keystone endpoint',
+                        default=os.environ['OS_AUTH_URL'])
+    parser.add_argument('--os_username', help='Openstack username',
+                        default=os.environ['OS_USERNAME'])
+    parser.add_argument('--os_password', help='Openstack password',
+                        default=os.environ['OS_PASSWORD'])
+    parser.add_argument('--os_tenant_name', help='Keystone tenant',
+                        default=os.environ['OS_TENANT_NAME'])
+    parser.add_argument('--rbd_client_name', help='Cephx user',
+                        default=os.environ['RBD_CLIENT'])
+    return parser.parse_args()
 
-    args = parser.parse_args()
+
+def main():
+    try:
+        args = parse_args()
+    except KeyError as e:
+        print '{0} environment variable not set!'.format(e)
+        sys.exit(1)
+
     global auth_url
     auth_url = args.auth_url
     global username
@@ -200,9 +189,6 @@ def parse_args():
         get_imagelist()
         report_images()
 
-
-def main():
-    parse_args()
 
 if __name__ == "__main__":
     main()
