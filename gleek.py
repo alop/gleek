@@ -105,6 +105,8 @@ def get_imagelist():
     glance = gl2client.Client(glance_endpoint, token=keystone.auth_token)
     imagelist = glance.images.list()
     for image in imagelist:
+        if image['status'] != 'active':
+            continue
         uuid = image['id']
         name = image['name']
         location = image['direct_url']
