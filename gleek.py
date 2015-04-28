@@ -27,7 +27,7 @@ from urlparse import urlparse
 from glanceclient import Client as glclient
 from glanceclient.v2 import client as gl2client
 import guestfs
-import keystoneclient.v2_0.client as ksclient
+import keystoneclient.v2_0.client as keystone
 import sqlite3
 
 
@@ -38,118 +38,125 @@ c.execute('''CREATE TABLE IF NOT EXISTS images(
              id text, name text, product text, version text, type text,
              distro text)''')
 
-auth_url = ""
-username = ""
-password = ""
-tenant_name = ""
 
+class Gleek(object):
+    def __init__(self, username, password, tenant_name, auth_url, rbd_client):
+        self._ks_client = self._get_ks_client(username,
+                                              password,
+                                              tenant_name,
+                                              auth_url)
+        self._rbd_client = rbd_client
 
-def inspect_image(disk, uuid, name, format, protocol, rbd_client):
-    """
-    Clearly this is specific to rbd hosted images, however a
-    future version may be more generic. 
-    Inspect OS of guest using GuestFS, write results to DB and
-    update glance metadata
-    """
-    g = guestfs.GuestFS(python_return_dict=True)
-    print "Checking %(protocol)s for %(name)s" % locals()
-    try:
-        g.add_drive_opts(disk, 1, format,
-                         protocol=protocol, username=rbd_client)
-    except RuntimeError as msg:
-        print "%s (ignored)" % msg
-        return
-    g.launch()
-    roots = g.inspect_os()
-    if not roots:
-        product = majver = minver = version = ostype = distro = "Unknown"
-    for root in roots:
-        product = g.inspect_get_product_name(root)
-        majver = g.inspect_get_major_version(root)
-        minver = g.inspect_get_minor_version(root)
-        version = str(majver) + "." + str(minver)
-        ostype = g.inspect_get_type(root)
-        distro = g.inspect_get_distro(root)
-    g.close()
-    c.execute("INSERT INTO images VALUES (?,?,?,?,?,?)",
-              (uuid, name, product, version, ostype, distro))
-    conn.commit()
-    update_image(uuid, ostype, version, product)
+    def inspect_image(self, disk, uuid, name, format, protocol):
+        """
+        Clearly this is specific to rbd hosted images, however a
+        future version may be more generic.
+        Inspect OS of guest using GuestFS, write results to DB and
+        update glance metadata
+        """
+        g = guestfs.GuestFS(python_return_dict=True)
+        print "Checking %(protocol)s for %(name)s" % locals()
+        try:
+            g.add_drive_opts(disk, 1, format,
+                             protocol=protocol, username=self._rbd_client)
+        except RuntimeError as msg:
+            print "%s (ignored)" % msg
+            return
+        g.launch()
+        roots = g.inspect_os()
+        if not roots:
+            product = majver = minver = version = ostype = distro = "Unknown"
+        for root in roots:
+            product = g.inspect_get_product_name(root)
+            majver = g.inspect_get_major_version(root)
+            minver = g.inspect_get_minor_version(root)
+            version = str(majver) + "." + str(minver)
+            ostype = g.inspect_get_type(root)
+            distro = g.inspect_get_distro(root)
+        g.close()
+        c.execute("INSERT INTO images VALUES (?,?,?,?,?,?)",
+                  (uuid, name, product, version, ostype, distro))
+        conn.commit()
+        self.update_image(uuid, ostype, version, product)
 
+    def report_images(self):
+        """
+        Print out from the DB what we know about images thusfar
+        Does not update glance metadata
+        """
+        allimages = c.execute(
+            "SELECT name, product, type, distro, version from images")
+        for img in allimages:
+            print("Image %s is %s, which is OS type %s\n"
+                  "The Distribution is %s, version %s") % (img[0], img[1],
+                                                           img[2], img[3],
+                                                           img[4])
 
-def report_images():
-    """
-    Print out from the DB what we know about images thusfar
-    Does not update glance metadata
-    """
-    allimages = c.execute(
-        "SELECT name, product, type, distro, version from images")
-    for img in allimages:
-        print("Image %s is %s, which is OS type %s\n"
-              "The Distribution is %s, version %s") % (img[0], img[1], img[2],
-                                                       img[3], img[4])
+    def get_imagelist(self):
+        """
+        Connect to glance, get an image list. If the image has already been
+        inspected, skip further inspection, Otherwise inspect the image
+        """
+        glance = self._get_glance2_client()
+        imagelist = glance.images.list()
+        for image in imagelist:
+            if image['status'] != 'active':
+                continue
+            uuid = image['id']
+            name = image['name']
+            location = image['direct_url']
+            format = image['disk_format']
+            url = urlparse(location)
+            protocol = url.scheme
+            disk = url.path.lstrip("/")
+            disk = disk.rstrip("/snap")
+            # Todo, how do I figure out the username? Maybe load from cfg?
+            # check db if we already have this image, else get it
+            exists = c.execute("SELECT id FROM images where id='%s'" % uuid)\
+                      .fetchone()
+            if exists is None:
+                self.inspect_image(disk,
+                                   uuid,
+                                   name,
+                                   format,
+                                   protocol)
+            else:
+                print "Image %(name)s already inspected, skipping" % locals()
 
-
-def get_imagelist():
-    """
-    Connect to glance, get an image list. If the image has already been
-    inspected, skip further inspection, Otherwise inspect the image
-    """
-    # Figure out endpoints
-    keystone = ksclient.Client(auth_url=auth_url,
-                               username=username,
-                               password=password,
-                               tenant_name=tenant_name)
-
-    glance_endpoint = keystone.service_catalog.url_for(service_type='image')
-    glance = gl2client.Client(glance_endpoint, token=keystone.auth_token)
-    imagelist = glance.images.list()
-    for image in imagelist:
-        if image['status'] != 'active':
-            continue
-        uuid = image['id']
-        name = image['name']
-        location = image['direct_url']
-        format = image['disk_format']
-        url = urlparse(location)
-        protocol = url.scheme
-        disk = url.path.lstrip("/")
-        disk = disk.rstrip("/snap")
-        # Todo, how do I figure out the username? Maybe load from cfg?
-        rbd_client = os.environ['RBD_CLIENT']
-        # check db if we already have this image, else get it
-        exists = c.execute("SELECT id FROM images where id='%s'" % uuid)\
-                  .fetchone()
-        if exists is None:
-            inspect_image(disk, uuid, name, format, protocol, rbd_client)
-        else:
-            print "Image %(name)s already inspected, skipping" % locals()
-
-
-def update_image(img_id, img_os, img_ver, prod_name):
-    """
-    Connect to glance via v1 API, as the v2 doesn't allow setting
-    arbitrary properties (yet)
-    Sets os_distro, os_version, os_name in glance metadata
-    """
-    # Figure out endpoints
-    keystone = ksclient.Client(auth_url=auth_url,
-                               username=username,
-                               password=password,
-                               tenant_name=tenant_name)
-
-    glance_endpoint = keystone.service_catalog.url_for(service_type='image')
-    glance = glclient('1', glance_endpoint, token=keystone.auth_token)
-    options = {'properties':
-               {'os_distro': img_os,
+    def update_image(self, img_id, img_os, img_ver, prod_name):
+        """
+        Connect to glance via v1 API, as the v2 doesn't allow setting
+        arbitrary properties (yet)
+        Sets os_distro, os_version, os_name in glance metadata
+        """
+        glance = self._get_glance_client()
+        options = {
+            'properties': {
+                'os_distro': img_os,
                 'os_version': img_ver,
                 'os_name': prod_name
-                }
-               }
-    glance.images.update(img_id, **options)
+            }
+        }
+        glance.images.update(img_id, **options)
+
+    def _get_ks_client(self, username, password, tenant_name, auth_url):
+        return keystone.Client(username=username,
+                               password=password,
+                               tenant_name=tenant_name,
+                               auth_url=auth_url)
+
+    def _get_glance2_client(self):
+        endpoint = self._ks_client.service_catalog.url_for(
+            service_type='image')
+        return gl2client.Client(endpoint, token=self._ks_client.auth_token)
+
+    def _get_glance_client(self):
+        endpoint = self._ks_client.service_catalog.url_for(
+            service_type='image')
+        return glclient('1', endpoint, token=self._ks_client.auth_token)
 
 
-def parse_args():
+def _parse_args():
     """
     Check for existence of openstack variables and rbd key
     """
@@ -171,25 +178,21 @@ def parse_args():
 
 def main():
     try:
-        args = parse_args()
+        args = _parse_args()
     except KeyError as e:
         print '{0} environment variable not set!'.format(e)
         sys.exit(1)
 
-    global auth_url
-    auth_url = args.auth_url
-    global username
-    username = args.os_username
-    global password
-    password = args.os_password
-    global tenant_name
-    tenant_name = args.os_tenant_name
-
+    g = Gleek(args.os_username,
+              args.os_password,
+              args.os_tenant_name,
+              args.auth_url,
+              args.rbd_client_name)
     if args.command == 'report':
-        report_images()
+        g.report_images()
     elif args.command == 'check':
-        get_imagelist()
-        report_images()
+        g.get_imagelist()
+        g.report_images()
 
 
 if __name__ == "__main__":
