@@ -16,5 +16,6 @@ export RBD_CLIENT=your-glance-client
 ## Requirements
 
 Gleek requires libguestfs 1.26+, which is not available via pypi
-Install via package manager or Download source from http://libguestfs.org 
-RHEL 7.1 users can use the included RPM
+Install via package manager or Download source from http://libguestfs.org
+
+RHEL 7.1 users can use the included [RPM](https://github.com/alop/gleek/raw/master/libguestfs-1.28.1-1.19.el7.x86_64.rpm)
