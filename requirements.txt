@@ -1,3 +1,2 @@
 python-keystoneclient
 python-glanceclient
-sqlite3
