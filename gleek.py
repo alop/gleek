@@ -130,14 +130,16 @@ class Gleek(object):
         Sets os_distro, os_version, os_name in glance metadata
         """
         glance = self._get_glance_client()
-        options = {
-            'properties': {
-                'os_distro': img_os,
-                'os_version': img_ver,
-                'os_name': prod_name
-            }
-        }
-        glance.images.update(img_id, **options)
+
+        props = glance.images.get(img_id).properties
+
+        props.update({
+            'os_distro': img_os,
+            'os_version': img_ver,
+            'os_name': prod_name
+            })
+
+        glance.images.update(img_id, properties=props)
 
     def _get_ks_client(self, username, password, tenant_name, auth_url):
         return keystone.Client(username=username,
